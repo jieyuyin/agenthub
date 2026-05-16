@@ -1,0 +1,43 @@
+{
+  "name": "@agenthub/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env API_PORT=3003 tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint . --ext .ts",
+    "type-check": "tsc --noEmit",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@agenthub/ai": "workspace:*",
+    "@agenthub/shared": "workspace:*",
+    "@fastify/cors": "^8.4.2",
+    "@fastify/websocket": "^11.2.0",
+    "@prisma/client": "^5.7.0",
+    "bcryptjs": "^2.4.3",
+    "bull": "^4.11.4",
+    "dotenv": "^16.3.1",
+    "fastify": "^4.25.0",
+    "jsonwebtoken": "^9.0.3",
+    "openai": "^4.24.0",
+    "redis": "^4.6.11",
+    "socket.io": "^4.8.3",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^8.55.0",
+    "prisma": "^5.7.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
