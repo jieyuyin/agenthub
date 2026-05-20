@@ -110,7 +110,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
     const agent = mockAgents.find(a => a.id === id);
 
     if (!agent) {
-      throw server.httpErrors.notFound('Agent not found');
+      throw (server as any).httpErrors?.notFound ? (server as any).httpErrors.notFound('Agent not found') : new Error('Agent not found');
     }
 
     return agent;
@@ -127,7 +127,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
     const execution = mockExecutions.find(e => e.id === id);
 
     if (!execution) {
-      throw server.httpErrors.notFound('Execution not found');
+      throw (server as any).httpErrors?.notFound ? (server as any).httpErrors.notFound('Execution not found') : new Error('Execution not found');
     }
 
     return execution;

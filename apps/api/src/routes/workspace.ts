@@ -1,41 +1,22 @@
 import { FastifyPluginAsync } from 'fastify';
-import { Workspace } from '@agenthub/shared';
+import * as workspaceService from '../services/workspaceService';
 
 export const workspaceRoutes: FastifyPluginAsync = async (server) => {
-  // Mock data - replace with actual DB queries later
-  const mockWorkspaces: Workspace[] = [
-    {
-      id: '1',
-      name: 'My First Project',
-      description: 'A sample workspace for development',
-      ownerId: 'user-1',
-      members: [
-        {
-          userId: 'user-1',
-          role: 'admin',
-          joinedAt: new Date(),
-        }
-      ],
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-  ];
-
   server.get('/workspaces', async () => {
-    return {
-      workspaces: mockWorkspaces,
-    };
+    const data = await workspaceService.listWorkspaces();
+    return data;
   });
 
   server.get('/workspaces/:id', async (request) => {
     const { id } = request.params as { id: string };
-    const workspace = mockWorkspaces.find(w => w.id === id);
+    const ws = await workspaceService.getWorkspaceById(id);
+    if (!ws) throw (server as any).httpErrors?.notFound ? (server as any).httpErrors.notFound('Workspace not found') : new Error('Workspace not found');
+    return ws;
+  });
 
-    if (!workspace) {
-      throw server.httpErrors.notFound('Workspace not found');
-    }
-
-    return workspace;
+  server.post('/workspaces', async (request) => {
+    const body = request.body as any;
+    const ws = await workspaceService.createWorkspace(body);
+    return ws;
   });
 };

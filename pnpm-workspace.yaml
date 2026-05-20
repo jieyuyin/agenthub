@@ -4,8 +4,11 @@ packages:
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
+  cpu-features: set this to true or false
   esbuild: true
   msgpackr-extract: false
   prisma: true
+  protobufjs: set this to true or false
   sharp: true
+  ssh2: set this to true or false
   unrs-resolver: false

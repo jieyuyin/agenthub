@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "jsx": "preserve",
     "lib": [
       "dom",
@@ -16,7 +20,6 @@
     "types": [
       "node"
     ],
-    "ignoreDeprecations": "6.0",
     "plugins": [
       {
         "name": "next"

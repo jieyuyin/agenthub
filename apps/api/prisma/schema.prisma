@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatar    String?
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaces WorkspaceMember[]
+  messages   Message[]
+}
+
+model Workspace {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  ownerId       String
+  status        String
+  runtimeId     String?   @unique
+  deploymentUrl String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime @updatedAt
+
+  members       WorkspaceMember[]
+  conversations Conversation[]
+  runtime       Runtime?  @relation(name: "WorkspaceRuntime")
+  executions    Execution[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String
+  role        String
+  joinedAt    DateTime  @default(now())
+}
+
+model Conversation {
+  id           String    @id @default(cuid())
+  workspace    Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId  String
+  type         String
+  title        String
+  description  String?
+  participants String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  messages     Message[]
+  tasks        Task[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversationId String
+  authorId       String
+  author         User         @relation(fields: [authorId], references: [id])
+  authorType     String
+  contentType    String
+  content        String
+  mentions       String?
+  attachments    String?
+  streaming      Boolean      @default(false)
+  reactions      String?
+  createdAt      DateTime     @default(now())
+  editedAt       DateTime?
+}
+
+model Task {
+  id                  String       @id @default(cuid())
+  conversation        Conversation @relation(fields: [conversationId], references: [id])
+  conversationId      String
+  title               String
+  description         String
+  status              String
+  assignedAgentId     String?
+  priority            Int          @default(3)
+  patches             Patch[]
+  toolExecutions      ToolExecution[]
+  agentTraces         AgentTrace[]
+  runtimeLogs         RuntimeLog[]
+  files               String?
+  acceptance_criteria String?
+  createdAt           DateTime     @default(now())
+  startedAt           DateTime?
+  completedAt         DateTime?
+}
+
+model ToolExecution {
+  id        String   @id @default(cuid())
+  task      Task     @relation(fields: [taskId], references: [id])
+  taskId    String
+  stepIndex Int      @default(0)
+  toolName  String
+  input     String
+  output    String?
+  status    String
+  error     String?
+  duration  Int
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@index([taskId, stepIndex])
+  @@map("tool_execution")
+}
+
+model AgentTrace {
+  id           String   @id @default(cuid())
+  task         Task     @relation(fields: [taskId], references: [id])
+  taskId       String
+  stepIndex    Int
+  prompt       String
+  reasoning    String?
+  toolSelected String?
+  result       String?
+  createdAt    DateTime @default(now())
+
+  @@index([taskId])
+  @@map("agent_trace")
+}
+
+model RuntimeLog {
+  id          String   @id @default(cuid())
+  runtime     Runtime  @relation(fields: [runtimeId], references: [id])
+  runtimeId   String
+  taskId      String?
+  task        Task?    @relation(fields: [taskId], references: [id])
+  stepIndex   Int      @default(0)
+  executionId String?
+  command     String
+  stdout      String?
+  stderr      String?
+  exitCode    Int?
+  duration    Int?
+  status      String
+  createdAt   DateTime @default(now())
+
+  @@index([taskId])
+  @@index([taskId, stepIndex])
+  @@index([runtimeId])
+  @@map("runtime_logs")
+}
+
+model Patch {
+  id         String @id @default(cuid())
+  task       Task   @relation(fields: [taskId], references: [id])
+  taskId     String
+  content    String
+  status     String
+  createdBy  String
+  appliedAt  DateTime?
+  appliedBy  String?
+  diff       String
+  createdAt  DateTime @default(now())
+}
+
+model Runtime {
+  id             String      @id @default(cuid())
+  workspace      Workspace   @relation(name: "WorkspaceRuntime", fields: [workspaceId], references: [id])
+  workspaceId    String      @unique
+  type           String
+  containerId    String
+  status         String
+  previewUrl     String?
+  exposedPorts   String?
+  filesystemRoot String
+  resources      String?
+  createdAt      DateTime    @default(now())
+  startedAt      DateTime?
+  updatedAt      DateTime    @updatedAt
+  executions     Execution[]
+  runtimeLogs    RuntimeLog[]
+}
+
+model Execution {
+  id          String   @id @default(cuid())
+  runtime     Runtime  @relation(fields: [runtimeId], references: [id])
+  runtimeId   String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  workspaceId String
+  command     String
+  status      String
+  exitCode    Int?
+  stdout      String?
+  stderr      String?
+  createdAt   DateTime @default(now())
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime @updatedAt
+}

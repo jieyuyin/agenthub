@@ -49,6 +49,7 @@ export interface Workspace {
   ownerId: string
   members: WorkspaceMember[]
   runtimeId?: string
+  runtime?: Runtime
   deploymentUrl?: string
   status: WorkspaceStatus
   createdAt: Date
@@ -217,6 +218,63 @@ export interface Runtime {
   }
   createdAt: Date
   startedAt?: Date
+}
+
+export interface WorkflowNode {
+  id: string
+  name: string
+  type: 'analysis' | 'patch' | 'test' | 'deploy' | 'verification' | 'custom'
+  description: string
+  agentRole: AgentRole | 'pm' | 'frontend' | 'backend'
+  input?: Record<string, any>
+  outputSchema?: Record<string, any>
+  status?: 'pending' | 'running' | 'completed' | 'failed'
+  dependsOn?: string[]
+}
+
+export interface WorkflowEdge {
+  from: string
+  to: string
+}
+
+export interface WorkflowGraph {
+  id: string
+  workspaceId: string
+  rootTaskId?: string
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  metadata?: Record<string, any>
+}
+
+export interface Execution {
+  id: string
+  runtimeId: string
+  workspaceId: string
+  command: string
+  status: 'running' | 'completed' | 'failed'
+  exitCode?: number
+  stdout?: string
+  stderr?: string
+  createdAt: Date
+  startedAt: Date
+  completedAt?: Date
+  updatedAt: Date
+}
+
+export interface RuntimeExecResult {
+  exitCode: number
+  stdout: string
+  stderr: string
+  durationMs: number
+}
+
+export interface RuntimeManager {
+  create(workspaceId: string, workspacePath: string): Promise<Runtime>
+  start(runtimeId: string): Promise<Runtime>
+  stop(runtimeId: string): Promise<void>
+  exec(runtimeId: string, command: string, options?: { cwd?: string; timeout?: number }): Promise<RuntimeExecResult>
+  getPreviewUrl(runtimeId: string): Promise<string | undefined>
+  getStatus(runtimeId: string): Promise<RuntimeStatus>
 }
 
 export interface TerminalSession {
