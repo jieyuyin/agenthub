@@ -14,7 +14,7 @@ export default function AgentsPage() {
       try {
         const [agentsResponse, executionsResponse] = await Promise.all([
           fetch('http://localhost:3003/api/agents'),
-          fetch('http://localhost:3003/api/executions')
+          fetch('http://localhost:3003/api/agent-executions')
         ]);
 
         const agentsData = await agentsResponse.json();

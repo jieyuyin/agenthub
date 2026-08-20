@@ -4,7 +4,11 @@ import type { TaskStatus } from '@agenthub/shared'
 export async function getTaskById(id: string) {
   return prisma.task.findUnique({
     where: { id },
-    include: { patches: true, conversation: { include: { workspace: { include: { runtime: true } } } } }
+    include: {
+      patches: true,
+      conversation: { include: { workspace: { include: { runtime: true } } } },
+      agentExecutions: true
+    }
   })
 }
 
@@ -17,6 +21,8 @@ export async function createTask(data: {
   title: string
   description?: string
   assignedAgentId?: string
+  assignedAgentIds?: string[]
+  createdBy?: string
   priority?: number
 }) {
   return prisma.task.create({
@@ -26,6 +32,8 @@ export async function createTask(data: {
       description: data.description ?? '',
       status: 'pending',
       assignedAgentId: data.assignedAgentId ?? null,
+      assignedAgentIds: data.assignedAgentIds ? JSON.stringify(data.assignedAgentIds) : null,
+      createdBy: data.createdBy ?? null,
       priority: data.priority ?? 3
     }
   })

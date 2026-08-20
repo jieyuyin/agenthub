@@ -87,16 +87,38 @@ model Task {
   description         String
   status              String
   assignedAgentId     String?
+  assignedAgentIds    String?
+  createdBy           String?
   priority            Int          @default(3)
   patches             Patch[]
   toolExecutions      ToolExecution[]
   agentTraces         AgentTrace[]
   runtimeLogs         RuntimeLog[]
+  agentExecutions     AgentExecution[]
   files               String?
   acceptance_criteria String?
   createdAt           DateTime     @default(now())
   startedAt           DateTime?
   completedAt         DateTime?
+}
+
+model AgentExecution {
+  id          String   @id @default(cuid())
+  task        Task     @relation(fields: [taskId], references: [id])
+  taskId      String
+  agentId     String
+  title       String
+  status      String
+  input       String?
+  output      String?
+  error       String?
+  logs        String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([taskId])
 }
 
 model ToolExecution {

@@ -5,9 +5,18 @@ export type UserRole = 'admin' | 'member' | 'viewer'
 export type WorkspaceStatus = 'active' | 'archived' | 'deleted'
 export type ConversationType = 'group' | 'thread' | 'dm'
 export type MessageContentType = 'text' | 'markdown' | 'code' | 'system'
-export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'blocked' | 'completed' | 'rejected'
+export type TaskStatus =
+  | 'pending'
+  | 'planning'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'assigned'
+  | 'in_progress'
+  | 'blocked'
+  | 'rejected'
 export type PatchStatus = 'generated' | 'review_requested' | 'approved' | 'applied' | 'rejected'
-export type AgentRole = 'pm' | 'frontend' | 'backend'
+export type AgentRole = 'pm' | 'frontend' | 'backend' | 'qa'
 export type AgentStatus = 'idle' | 'busy' | 'error' | 'paused'
 export type RuntimeStatus = 'starting' | 'ready' | 'error' | 'stopped'
 export type DeploymentStatus = 'pending' | 'building' | 'success' | 'failed'
@@ -111,6 +120,8 @@ export interface Task {
   description: string
   status: TaskStatus
   assignedAgentId?: string
+  assignedAgentIds?: string[]
+  createdBy?: string
   priority: number // 1-5
   patches: Patch[]
   files: FileChange[]
@@ -171,12 +182,13 @@ export interface AgentExecution {
   id: string
   agentId: string
   taskId: string
-  status: 'running' | 'completed' | 'failed'
+  title: string
+  status: 'queued' | 'running' | 'completed' | 'failed'
   input: Record<string, any>
   output?: Record<string, any>
   error?: string
   logs: string[]
-  startedAt: Date
+  startedAt?: Date
   completedAt?: Date
 }
 
@@ -225,7 +237,7 @@ export interface WorkflowNode {
   name: string
   type: 'analysis' | 'patch' | 'test' | 'deploy' | 'verification' | 'custom'
   description: string
-  agentRole: AgentRole | 'pm' | 'frontend' | 'backend'
+  agentRole: AgentRole | 'pm' | 'frontend' | 'backend' | 'qa' 
   input?: Record<string, any>
   outputSchema?: Record<string, any>
   status?: 'pending' | 'running' | 'completed' | 'failed'

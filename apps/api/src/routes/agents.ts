@@ -45,6 +45,27 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       status: 'idle',
       lastActivityAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
       createdAt: new Date(),
+    },
+    {
+      id: 'qa-1',
+      name: 'QA Developer',
+      role: 'qa',
+      version: '1.0.0',
+      systemPrompt:
+        'You are a QA developer agent specializing in testing, automation, and quality assurance.',
+      tools: [
+        'unit_testing',
+        'integration_testing',
+        'e2e_testing',
+        'bug_reporting',
+        'test_automation',
+      ],
+      model: 'gpt-4',
+      temperature: 0.3,
+      maxTokens: 2500,
+      status: 'idle',
+      lastActivityAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
+      createdAt: new Date(),
     }
   ];
 
@@ -116,20 +137,10 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
     return agent;
   });
 
-  server.get('/executions', async () => {
+  // Mock agent run history (distinct from runtime container Execution at GET /api/executions/:id)
+  server.get('/agent-executions', async () => {
     return {
       executions: mockExecutions,
     };
-  });
-
-  server.get('/executions/:id', async (request) => {
-    const { id } = request.params as { id: string };
-    const execution = mockExecutions.find(e => e.id === id);
-
-    if (!execution) {
-      throw (server as any).httpErrors?.notFound ? (server as any).httpErrors.notFound('Execution not found') : new Error('Execution not found');
-    }
-
-    return execution;
   });
 };

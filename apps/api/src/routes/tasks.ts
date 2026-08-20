@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify'
 import * as taskService from '../services/taskService'
+import * as agentExecutionService from '../services/agentExecutionService'
 import * as observabilityService from '../services/observabilityService'
 import * as timelineService from '../services/timelineService'
 import { runTaskAgent } from '../services/taskExecutor'
@@ -89,17 +90,19 @@ export const taskRoutes: FastifyPluginAsync = async (server) => {
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' })
     }
-    const [toolExecutions, agentTraces, runtimeLogs] = await Promise.all([
+    const [toolExecutions, agentTraces, runtimeLogs, agentExecutions] = await Promise.all([
       observabilityService.listToolExecutionsByTask(id),
       observabilityService.listAgentTracesByTask(id),
-      observabilityService.listRuntimeLogsByTask(id)
+      observabilityService.listRuntimeLogsByTask(id),
+      agentExecutionService.listAgentExecutionsByTask(id)
     ])
     return {
       data: {
         taskId: id,
         toolExecutions,
         agentTraces,
-        runtimeLogs
+        runtimeLogs,
+        agentExecutions
       }
     }
   })
