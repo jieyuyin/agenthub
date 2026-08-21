@@ -5,6 +5,7 @@
   "description": "AI Native Software Collaboration Platform",
   "scripts": {
     "dev": "turbo run dev",
+    "desktop:dev": "pnpm --filter @agenthub/desktop dev",
     "build": "turbo run build",
     "test": "turbo run test",
     "lint": "turbo run lint",

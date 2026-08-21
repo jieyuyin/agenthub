@@ -9,6 +9,7 @@ import { chatRoutes } from './routes/chat';
 import { runtimeRoutes } from './routes/runtime';
 import { taskRoutes } from './routes/tasks';
 import { aiRoutes } from './routes/ai';
+import { contextRoutes } from './routes/context';
 import { initSocket } from './socket';
 
 const PORT = Number(process.env.API_PORT || 3003);
@@ -30,6 +31,7 @@ await server.register(chatRoutes, { prefix: '/api' });
 await server.register(runtimeRoutes, { prefix: '/api' });
 await server.register(taskRoutes, { prefix: '/api' });
 await server.register(aiRoutes, { prefix: '/api' });
+await server.register(contextRoutes, { prefix: '/api' });
 
 try {
   // Socket.IO must attach before listen (same underlying http.Server)

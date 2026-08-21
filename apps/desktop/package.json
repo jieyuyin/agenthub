@@ -1,0 +1,14 @@
+{
+  "name": "@agenthub/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "type-check": "node --check src/main.cjs && node --check src/preload.cjs"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6"
+  }
+}

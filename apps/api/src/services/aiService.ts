@@ -1,4 +1,6 @@
 
+import { getActiveModelConfig, type ModelConfigInput } from './modelConfigService'
+
 const REQUEST_TIMEOUT_MS = Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 120_000)
 
 // =======================
@@ -39,6 +41,7 @@ function stripEnv(value?: string) {
 
 export function getAIModel() {
   return (
+    getActiveModelConfig()?.modelId ||
     stripEnv(process.env.LOCAL_AI_MODEL) ||
     stripEnv(process.env.OPENAI_MODEL) ||
     'qwen2.5:latest'
@@ -60,6 +63,10 @@ async function listOllamaModels(base: string): Promise<string[]> {
 // CONFIG DEBUG
 // =======================
 export function getAIConfigSummary() {
+  const saved = getActiveModelConfig()
+  if (saved) {
+    return { provider: saved.provider, url: saved.baseUrl, model: saved.modelId, source: 'model-library' }
+  }
   const localBase = getLocalBase()
   const openaiKey = getOpenaiKey()
   const openaiBase = getOpenaiBase()
@@ -134,7 +141,8 @@ async function fetchWithTimeout(url: string, init: RequestInit) {
 async function callOllama(
   url: string,
   model: string,
-  messages: any[]
+  messages: any[],
+  tools?: any[]
 ) {
   const response = await fetchWithTimeout(url, {
     method: 'POST',
@@ -142,7 +150,8 @@ async function callOllama(
     body: JSON.stringify({
       model,
       messages,
-      stream: false
+      stream: false,
+      ...(tools?.length ? { tools } : {})
     })
   })
 
@@ -163,19 +172,15 @@ async function callOllama(
 
   const data = JSON.parse(text)
 
-  const content =
-    data.message?.content ??
-    data.response ??
-    ''
-
-  if (!content) {
+  const message = data.message ?? { content: data.response ?? '' }
+  if (!message.content && !message.tool_calls?.length) {
     throw new Error(
       `[Ollama] 返回为空，模型可能未加载完成: ${model}`
     )
   }
 
   return {
-    choices: [{ message: { content } }]
+    choices: [{ message }]
   }
 }
 
@@ -186,7 +191,8 @@ async function callOpenAICompatible(
   url: string,
   model: string,
   messages: any[],
-  apiKey?: string
+  apiKey?: string,
+  tools?: any[]
 ) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
@@ -202,7 +208,8 @@ async function callOpenAICompatible(
     body: JSON.stringify({
       model,
       messages,
-      stream: false
+      stream: false,
+      ...(tools?.length ? { tools, tool_choice: 'auto' } : {})
     })
   })
 
@@ -216,14 +223,45 @@ async function callOpenAICompatible(
 
   const data = JSON.parse(text)
 
-  const content = data.choices?.[0]?.message?.content ?? ''
-
-  if (!content) {
+  const message = data.choices?.[0]?.message
+  if (!message?.content && !message?.tool_calls?.length) {
     throw new Error('[OpenAI] 返回为空')
   }
 
   return {
-    choices: [{ message: { content } }]
+    choices: [{ message }]
+  }
+}
+
+function callMockLLM(model: string, messages: any[], tools?: any[]) {
+  const lastMessage = [...messages].reverse().find((message) => message.role === 'user')?.content ?? ''
+  const toolMessages = messages.filter((message) => message.role === 'tool')
+  if (tools?.length && toolMessages.length === 0) {
+    return { choices: [{ message: { content: '', tool_calls: [{ id: `mock-${Date.now()}`, type: 'function', function: { name: 'list_files', arguments: JSON.stringify({ path: '.', depth: 2 }) } }] } }] }
+  }
+  if (tools?.length && toolMessages.length > 0) {
+    return { choices: [{ message: { content: `MockLLM 本地工具链路正常。已成功调用 \`list_files\` 并收到 Workspace 结果。\n\n真实模型接入后，Project Assistant 会根据你的问题继续读取相关文件、提出修改，并在你确认后写入。` } }] }
+  }
+  return {
+    choices: [{
+      message: {
+        content: `MockLLM 链路正常：模型 ${model} 已收到请求「${String(lastMessage).slice(0, 80)}」`
+      }
+    }]
+  }
+}
+
+export async function testModelConnection(config: ModelConfigInput) {
+  const startedAt = Date.now()
+  const completion = await createChatCompletion({
+    messages: [{ role: 'user', content: 'AgentHub connection test' }],
+    model: config.modelId,
+    config
+  })
+  return {
+    ok: true,
+    latencyMs: Date.now() - startedAt,
+    reply: completion.choices?.[0]?.message?.content ?? ''
   }
 }
 
@@ -234,12 +272,24 @@ export async function createChatCompletion(options: {
   messages: any[]
   model?: string
   temperature?: number
+  config?: ModelConfigInput
+  tools?: any[]
 }) {
   if (!Array.isArray(options.messages)) {
     throw new Error('[aiService] messages 必须是数组')
   }
 
-  const model = options.model ?? getAIModel()
+  const savedConfig = options.config ?? getActiveModelConfig()
+  const model = savedConfig?.modelId ?? options.model ?? getAIModel()
+
+  if (savedConfig) {
+    if (savedConfig.provider === 'mockllm') return callMockLLM(model, options.messages, options.tools)
+    const endpoint = savedConfig.provider === 'ollama'
+      ? `${savedConfig.baseUrl.replace(/\/$/, '')}/api/chat`
+      : `${savedConfig.baseUrl.replace(/\/$/, '')}/chat/completions`
+    if (savedConfig.provider === 'ollama') return callOllama(endpoint, model, options.messages, options.tools)
+    return callOpenAICompatible(endpoint, model, options.messages, savedConfig.apiKey, options.tools)
+  }
   const localBase = getLocalBase()
   const localApiKey = getLocalApiKey()
   const openaiKey = getOpenaiKey()
@@ -255,14 +305,15 @@ export async function createChatCompletion(options: {
     const { url, mode } = resolveLocalEndpoint(localBase)
 
     if (mode === 'ollama') {
-      return callOllama(url, model, options.messages)
+      return callOllama(url, model, options.messages, options.tools)
     }
 
     return callOpenAICompatible(
       url,
       model,
       options.messages,
-      localApiKey
+      localApiKey,
+      options.tools
     )
   }
 
@@ -276,7 +327,8 @@ export async function createChatCompletion(options: {
       url,
       model,
       options.messages,
-      openaiKey
+      openaiKey,
+      options.tools
     )
   }
 
@@ -286,4 +338,54 @@ export async function createChatCompletion(options: {
   throw new Error(
     '[aiService] 未配置 AI：请设置 LOCAL_AI_BASE=http://localhost:11434 或 OPENAI_API_KEY'
   )
+}
+
+export async function streamChatCompletion(options: { messages: any[]; onDelta: (content: string) => void; model?: string; config?: ModelConfigInput }) {
+  const savedConfig = options.config ?? getActiveModelConfig()
+  const model = savedConfig?.modelId ?? options.model ?? getAIModel()
+  if (savedConfig?.provider === 'mockllm') {
+    const content = String(callMockLLM(model, options.messages).choices[0].message.content)
+    for (const chunk of content.match(/[\s\S]{1,12}/g) ?? []) options.onDelta(chunk)
+    return content
+  }
+
+  let url: string
+  let apiKey: string | undefined
+  let ollama = false
+  if (savedConfig) {
+    ollama = savedConfig.provider === 'ollama'
+    url = ollama ? `${savedConfig.baseUrl.replace(/\/$/, '')}/api/chat` : `${savedConfig.baseUrl.replace(/\/$/, '')}/chat/completions`
+    apiKey = savedConfig.apiKey
+  } else if (getLocalBase()) {
+    const resolved = resolveLocalEndpoint(getLocalBase() as string)
+    url = resolved.url; ollama = resolved.mode === 'ollama'; apiKey = getLocalApiKey()
+  } else if (getOpenaiKey()) {
+    url = `${getOpenaiBase().replace(/\/$/, '')}/chat/completions`; apiKey = getOpenaiKey()
+  } else throw new Error('[aiService] 未配置 AI')
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+  const response = await fetchWithTimeout(url, { method: 'POST', headers, body: JSON.stringify({ model, messages: options.messages, stream: true }) })
+  if (!response.ok || !response.body) throw new Error(`[AI Stream Error] ${response.status}\n${await response.text()}`)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let full = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const rawLine of lines) {
+      const line = rawLine.trim()
+      if (!line) continue
+      try {
+        const data = JSON.parse(ollama ? line : line.replace(/^data:\s*/, ''))
+        const delta = String(ollama ? (data.message?.content ?? data.response ?? '') : (data.choices?.[0]?.delta?.content ?? ''))
+        if (delta) { full += delta; options.onDelta(delta) }
+      } catch { /* ignore SSE keepalive and [DONE] */ }
+    }
+  }
+  return full
 }

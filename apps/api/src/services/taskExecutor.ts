@@ -4,6 +4,7 @@ import * as agentExecutionService from './agentExecutionService'
 import * as observabilityService from './observabilityService'
 import { createAgentToolHandlers, type AgentToolHandlers } from './agentToolHandlers'
 import { createChatCompletion } from './aiService'
+import { addToolContext, updateTaskState } from './contextEngineService'
 
 const MAX_TOOL_ROUNDS = 24
 const MAX_TERMINAL_FAILURE_RETRIES = 3
@@ -140,6 +141,7 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
   }
 
   await taskService.updateTaskStatus(task.id, 'running', { startedAt: new Date() })
+  updateTaskState({ projectId: workspace.id, goal: task.title, phase: 'execution', status: 'running', nextStep: execution.title })
   await agentExecutionService.updateAgentExecutionStatus({
     id: executionId,
     status: 'running',
@@ -220,6 +222,12 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
         }
 
         const result = await dispatchTool(task.id, round, fn.name, parsed, handlers)
+        addToolContext({
+          projectId: workspace.id,
+          conversationId: task.conversationId,
+          tool: fn.name,
+          summary: JSON.stringify(result).slice(0, 4000)
+        })
         toolResults.push({ tool: fn.name, result })
         messages.push({
           role: 'tool',
@@ -265,6 +273,7 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
     }
 
     if (completed) {
+      updateTaskState({ projectId: workspace.id, goal: task.title, phase: 'verification', status: 'completed', nextStep: '由 Project Assistant 汇总结果' })
       await agentExecutionService.updateAgentExecutionStatus({
         id: executionId,
         status: 'completed',

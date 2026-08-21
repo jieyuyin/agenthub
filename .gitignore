@@ -17,3 +17,9 @@ package-lock.json
 yarn.lock
 coverage
 .nyc_output
+.pnpm-store/
+
+# Local model credentials and runtime configuration
+apps/api/data/model-configs.json
+apps/api/data/context-store.json
+apps/api/data/memory/
