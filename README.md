@@ -1,376 +1,346 @@
 # AgentHub
 
-**AI Native Software Collaboration Platform** — 多 Agent 协作的智能开发工作空间
+AgentHub 是一个面向软件研发场景的本地 Coding Agent 平台。它以 Project Assistant 作为统一交互入口，通过结构化 Intent Router 将普通对话直接回复，将项目任务路由至动态 Coding Worker Agent Loop；结合可切换工具后端、Docker Sandbox 与实时状态同步，自主完成代码检索、文件修改、命令执行、Git 操作及结果验证，并在复杂任务中按需调用专业 Subagent。
 
-## 概述
+> 当前项目以“一个主 Coding Worker 自主循环执行，复杂时按需调用 Subagent”为核心，不采用固定的 Developer → Tester → Debugger 流水线。
 
-AgentHub 是一个基于 AI 的团队协作平台，核心价值是：
+## 当前已实现
 
-- 🤖 **多 Agent 协作** - PM、Frontend、Backend Agent 协同工作
-- 💬 **实时协作聊天** - 类似 Slack 的群聊系统
-- 🎯 **自动任务分解** - 需求自动拆解为可执行任务
-- 📝 **代码 Review 工作流** - Agent 生成代码，用户审核后应用
-- 🚀 **完整开发闭环** - 从聊天到部署的端到端工作流
-- 🐳 **隔离运行时** - Docker 容器提供安全的代码执行环境
-- 👀 **实时预览** - 即时查看代码改动效果
-- 🌐 **一键部署** - 直接部署到 Vercel/Railway
+- Electron 桌面端与本地 Workspace 授权
+- 项目与多对话管理，对话运行状态相互隔离
+- OpenAI-compatible API、Ollama 和本地模型配置
+- 流式普通聊天与结构化 Intent Router
+- Coding Worker Agent Loop
+- 动态上下文管理与长对话自动压缩
+- 文件读取、创建、写入和精确 Patch
+- 一次性命令执行与常驻服务管理
+- Git 状态、分支、Diff、克隆、拉取、切换和提交
+- 工具执行阶段实时显示
+- 修改完成后的文件统计和 Diff 抽屉
+- Debug、Review、Explore Subagent 动态调度
+- 三种项目运行模式：本地开发、Docker 运行和完全隔离 Sandbox
+- Sandbox 工作副本、容器执行、冲突检测、安全同步与自动回收
 
-## 核心区别
+尚未完成或尚未完整接入：
 
-| | 普通 AI Chat | AgentHub |
-|---|---|---|
-| 交互方式 | 1:1 对话 | 多 Agent 群聊 |
-| Agent 数量 | 1 个超级 Agent | 多个专业 Agent |
-| 工作方式 | 手动循环 | 自动化工作流 |
-| 代码改动 | 生成代码文本 | Patch + Review + Apply |
-| 运行环境 | 无 | Docker 隔离容器 |
-| 预览功能 | 无 | 实时在线预览 |
-| 部署 | 无 | 集成部署系统 |
+- Sandbox 只读根文件系统、细粒度网络白名单与断点恢复
+- 完整 TaskGraph 多 Agent 编排 UI
+- 云端部署集成
+- 生产级用户认证和远程数据同步
 
-## 快速开始
+## Agent 架构
 
-### 前置要求
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
-- Docker (用于 Runtime)
-- PostgreSQL 数据库
-- Redis
-
-### 安装
-
-```bash
-# 克隆仓库
-git clone https://github.com/yourusername/agenthub.git
-cd agenthub
-
-# 安装依赖
-pnpm install
-
-# 配置环境变量
-cp .env.example .env.local
-
-# 数据库迁移
-pnpm run db:migrate
-
-# 启动开发服务器
-pnpm run dev
+```text
+用户消息
+   ↓
+Project Assistant（统一交互入口）
+   ↓
+Intent Router
+   ├─ chat
+   ├─ inspect
+   ├─ modify
+   ├─ execute
+   └─ diagnose
+          ↓
+   是否需要本地工具？
+   ├─ 否 → 直接流式回复
+   └─ 是 → Coding Worker
+                    ↓
+       Reasoning → Action → Tool
+           ↑                  ↓
+       Context Update ← Observation
+                    ↓
+          Complexity Evaluator
+                    ↓
+       必要时调用只读 Subagent
+                    ↓
+        验收条件满足后生成回复与 Diff
 ```
 
-访问 http://localhost:3000
+### Project Assistant
 
-### 项目结构
+Project Assistant 是面向用户的统一助手身份和任务入口，不是另一套独立的代码执行 Agent。它负责接收项目对话、组织任务上下文、调用 Intent Router，并根据项目配置选择本地、Docker 运行或完全隔离模式；需要操作项目时，由 Coding Worker 负责实际的检索、修改、执行和验证。
 
-```
-agenthub/
-├── apps/
-│   ├── web/              # Next.js 前端
-│   │   ├── src/
-│   │   │   ├── app/      # App Router
-│   │   │   ├── components/
-│   │   │   ├── lib/
-│   │   │   └── styles/
-│   │   └── package.json
-│   └── api/              # Fastify 后端
-│       ├── src/
-│       │   ├── routes/
-│       │   ├── services/
-│       │   ├── db/
-│       │   └── websocket/
-│       └── package.json
-├── packages/
-│   ├── ui/               # UI 组件库
-│   ├── shared/           # 共享类型和工具
-│   ├── ai/               # Agent & Tool 系统
-│   ├── prompts/          # Agent Prompts (不编译)
-│   └── agent-runtime/    # Agent 执行时环境
-├── infra/
-│   ├── docker/           # Docker 配置
-│   └── scripts/          # 部署脚本
-├── docs/
-│   ├── architecture/     # 系统设计文档
-│   ├── api/              # API 文档
-│   └── agents/           # Agent 说明
-├── package.json
-├── turbo.json
-└── tsconfig.base.json
-```
+### Intent Router
 
-## 核心概念
+消息首先被转换成结构化路由结果：
 
-### Workspace
-一个隔离的工作空间，包含：
-- 聊天记录
-- 任务列表
-- 代码文件
-- 独立的 Docker 容器
-- 部署历史
-
-### Conversation
-实时协作聊天，支持：
-- 多个参与者（用户 + Agents）
-- @mention 特定 Agent
-- Markdown 和代码块
-- 实时流式输出
-
-### Agent
-专业的 AI 助手，包括：
-- **PM Agent**: 需求分析、任务分解
-- **Frontend Agent**: UI/UX 实现
-- **Backend Agent**: API 开发、数据库
-
-### Task
-可执行的工作单位：
-- 由 PM Agent 生成
-- 自动分配给专业 Agent
-- 生成代码 Patch
-- 用户审核 → 应用
-
-### Patch
-代码改动提案：
-- Git diff 格式
-- 显示在聊天中供审核
-- 用户批准后应用
-- 保留完整历史
-
-### Runtime
-隔离的执行环境：
-- 独立 Docker 容器
-- Node.js 应用运行环境
-- npm install / npm run dev
-- 文件变更实时同步
-
-## 工作流示例
-
-### 场景：开发一个用户登录功能
-
-**第一步：提需求**
-```
-User: "我需要开发用户登录功能，包括表单和后端 API"
-```
-
-**第二步：PM Agent 分解**
-PM Agent 分析需求后：
-```
-✓ Task 1: 创建登录表单 UI (分配给 Frontend Agent)
-✓ Task 2: 实现登录 API (分配给 Backend Agent)
-✓ Task 3: 数据库用户表设计 (分配给 Backend Agent)
-✓ Task 4: 集成 JWT 认证 (分配给 Backend Agent)
-```
-
-**第三步：Frontend Agent 开发**
-Frontend Agent 读取项目结构，使用 Tailwind 创建登录表单：
-```
-Agent: 我已创建登录表单组件
-📝 查看 Diff: src/components/LoginForm.tsx
-
-用户审核代码改动，然后点击 ✓ Approve
-```
-
-**第四步：Backend Agent 开发**
-Backend Agent 实现登录 API：
-```
-Agent: 我已实现 POST /api/auth/login 端点
-📝 查看 Diff: src/api/routes/auth.ts
-
-💡 前端需要的 API 响应格式：
+```json
 {
-  token: string,
-  user: { id, email, name }
+  "mode": "inspect",
+  "needsTools": true,
+  "continuePreviousTask": false,
+  "intents": ["inspect_code"],
+  "targets": [".auth-container"],
+  "requiresWrite": false,
+  "requiresVerification": false,
+  "confidence": 0.95,
+  "source": "rule"
 }
 ```
 
-**第五步：用户批准改动**
-用户在 Diff 中审查，然后点击 Apply：
-```
-✓ Frontend Patch Applied (files synced to runtime)
-✓ Backend Patch Applied
-🔄 Runtime restarted
-👀 Preview refreshed
-```
+明确意图使用本地规则快速判断；模糊或混合请求由模型输出结构化 JSON；模型路由异常时回退到安全的只读检查。
 
-**第六步：预览和测试**
-```
-User 在 Preview 中测试登录表单
-→ 填写邮箱和密码
-→ 看到成功登录
-→ 得到 JWT Token
-```
+| 模式 | 行为 | 完成条件 |
+| --- | --- | --- |
+| `chat` | 寒暄、确认、普通问答 | 直接回答当前消息 |
+| `inspect` | 查看代码、配置或状态 | 必须取得真实读取或状态证据 |
+| `modify` | 修改文件或功能 | 必须真实写入并完成验证 |
+| `execute` | 命令、Git、服务操作 | 必须取得真实工具结果 |
+| `diagnose` | 报错、异常、失败排查 | 执行检查、定位、修复和验证闭环 |
 
-**第七步：部署**
-```
-User: "@pm 部署这个功能到生产"
+### Coding Worker
 
-System: 
-✓ Building...
-✓ Running tests...
-✓ Deploying to Vercel...
-✓ Live at: https://myapp.vercel.app
+Coding Worker 内部采用动态 Agent Loop：
+
+```text
+Reasoning
+→ 选择一个 Action
+→ 调用 Tool
+→ 获取 Observation
+→ 更新 Context
+→ 判断是否完成
 ```
 
-## 系统架构
+系统不会把“现在创建文件”“让我测试一下”等计划文字视为完成。修改任务没有真实写入不能结束，验证失败时会继续读取证据、修复并重试。
 
-### 分层架构
+### Context Manager
 
-```
-┌─────────────────────────────────────┐
-│  Frontend (Next.js)                 │
-│  Chat | Tasks | Editor | Preview    │
-└────────────┬────────────────────────┘
-             │ WebSocket / HTTP
-┌────────────▼────────────────────────┐
-│  API Server (Fastify)               │
-│  Routes | Auth | Business Logic     │
-└────────────┬────────────────────────┘
-             │ Events
-┌────────────▼────────────────────────┐
-│  Event Bus (Redis Streams)          │
-│  Persistence | Broadcast | Dispatch │
-└─┬──────────┬──────────┬─────────────┘
-  │          │          │
-  ▼          ▼          ▼
-┌────────┐ ┌─────────┐ ┌──────────────┐
-│ Agent  │ │ Runtime │ │ Integrations │
-│Engine  │ │ Manager │ │ (Vercel etc) │
-└────────┘ └─────────┘ └──────────────┘
+- **Task Context**：目标、约束、验收条件和背景
+- **Code Context**：按需搜索和读取到的代码
+- **Execution Context**：工具调用、命令输出、测试结果和错误
+- **Change Context**：修改文件、验证结果和 Diff
+
+上下文不会一次加载整个项目。对话超过阈值后，较早消息会被压缩为结构化摘要，并保留最近原始消息。
+
+### Complexity 与 Subagent
+
+每轮按照以下公式计算复杂度：
+
+```text
+Score = 0.25 × Failure
+      + 0.25 × Uncertainty
+      + 0.20 × Scope
+      + 0.15 × Context
+      + 0.15 × Risk
 ```
 
-### 技术栈
+- Score `< 0.6`：Coding Worker 自己继续
+- Score `>= 0.6`：允许调用专业 Subagent
 
-**前端**:
-- Next.js 15
-- TypeScript
-- Tailwind CSS
-- shadcn/ui
-- Monaco Editor
-- Zustand (状态管理)
-- Socket.io 客户端
-- TanStack Query
+可用 Subagent：
 
-**后端**:
-- Node.js (runtime)
-- Fastify (框架)
-- TypeScript
-- Prisma (ORM)
-- PostgreSQL (数据库)
-- Redis (缓存 & 事件)
-- Socket.io (WebSocket)
-- OpenAI SDK (LLM)
+- **Debug Agent**：多次失败且根因不明确时分析问题
+- **Review Agent**：认证、权限、支付、数据库等高风险修改完成后审查
+- **Explore Agent**：影响范围或代码关系复杂时辅助探索
 
-**基础设施**:
-- Docker (容器)
-- Vercel/Railway (部署)
-- GitHub Actions (CI/CD)
+Subagent 当前为只读顾问，负责给出分析和建议；文件修改权仍由 Coding Worker 持有。
 
-## API 快速参考
+## 本地工具
 
-### Chat API
+### 文件
 
+- `list_files`
+- `read_file`
+- `write_file`
+- `apply_patch`
+- `create_directory`
+
+### Git
+
+- `git_status`
+- `git_branches`
+- `git_diff`
+- `git_clone`
+- `git_pull`
+- `git_checkout`
+- `git_commit`
+
+### 命令与服务
+
+- `run_command`：安装、构建、测试、类型检查等会结束的命令
+- `start_service`：启动 dev、server、watch 等常驻服务
+- `service_status`：检查服务状态与日志
+- `stop_service`：停止后台服务
+
+工具只能访问用户授权的 Workspace，相对路径会经过边界检查。Git 写操作、命令执行、服务操作和大范围文件修改需要用户确认。
+
+## 技术栈
+
+**核心技术栈：** Next.js 15、React 19、TypeScript、Electron 37、Node.js、Fastify、Socket.IO、Prisma、SQLite、Docker、Dockerode、Tailwind CSS、pnpm、Turborepo。
+
+- **桌面与前端**：Electron、Next.js、React、TypeScript、Tailwind CSS
+- **API 与实时通信**：Node.js、Fastify、Socket.IO
+- **数据存储**：Prisma、SQLite（默认）
+- **Agent Runtime**：自研 Intent Router、Coding Worker Agent Loop、Context Manager、Tool Registry 与动态 Subagent 调度
+- **隔离运行时**：Docker、Dockerode、Sandbox 工作副本与安全同步
+- **模型接入**：OpenAI-compatible API、Ollama、LM Studio 等
+- **工程化**：pnpm workspace、Turborepo
+
+## 项目结构
+
+```text
+.
+├── apps/
+│   ├── api/                  # API、Socket.IO、Intent Router、Worker 接入
+│   ├── desktop/              # Electron 与本地 Workspace 工具
+│   └── web/                  # 对话、项目、状态和 Diff UI
+├── packages/
+│   ├── agent-runtime/        # Coding Worker、Context、Complexity、Docker Runtime
+│   ├── ai/                   # AI 工具封装
+│   ├── prompts/              # Agent 提示词
+│   ├── shared/               # 共享类型
+│   └── ui/                   # UI 包
+├── docs/                     # 设计与开发文档
+├── package.json
+└── turbo.json
 ```
-POST /api/conversations/:id/messages
-发送消息
 
-WS /socket
-实时消息
+## 快速开始
 
-GET /api/conversations/:id/messages?limit=50&offset=0
-获取消息列表
-```
+### 环境要求
 
-### Task API
+- Node.js 22.13 或更高版本（pnpm 11 要求）
+- pnpm（仓库通过 Corepack 固定版本）
+- Docker Desktop（仅使用 Docker Runtime 时需要）
 
-```
-POST /api/workspaces/:id/tasks
-创建任务
+默认数据库是 SQLite，不需要单独安装 PostgreSQL 或 Redis。
 
-PATCH /api/tasks/:id
-更新任务状态
-
-GET /api/workspaces/:id/tasks
-列表任务
-```
-
-### Agent API
-
-```
-POST /api/agents/:id/invoke
-调用 Agent
-
-GET /api/agents
-列表所有 Agent
-```
-
-## 开发指南
-
-### 添加新的 Agent
-
-1. 创建 prompt 文件: `packages/prompts/agents/my-agent.md`
-2. 在 `packages/ai` 中实现 Agent 类
-3. 在 dispatcher 中添加路由规则
-4. 添加必要的 tools
-
-### 添加新的 Tool
-
-1. 定义 Tool schema
-2. 实现 handler 函数
-3. 注册到 Tool Registry
-4. 添加到对应 Agent 的 tools 列表
-
-### 调试 Agent
+### 安装依赖
 
 ```bash
-# 查看 Agent 日志
-docker logs workspace-container-id
-
-# 检查事件流
-redis-cli
-> XREAD COUNT 10 STREAMS agent-events $
+corepack enable
+pnpm install
 ```
 
-## 文档
+### 配置 API
 
-- [系统设计](./docs/architecture/SYSTEM_DESIGN.md)
-- [Agent 系统](./docs/architecture/AGENT_SYSTEM_DESIGN.md)
-- [API 文档](./docs/api/API.md)
-- [开发计划](./docs/DEVELOPMENT_PLAN.md)
+Windows：
 
-## 开发状态
+```powershell
+Copy-Item apps/api/.env.example apps/api/.env
+```
 
-### MVP (2026-06-13)
-- [x] Monorepo 基础框架
-- [ ] Chat 系统
-- [ ] 3 个 Agent (PM, Frontend, Backend)
-- [ ] Task 管理
-- [ ] Code Diff & Review
-- [ ] Docker Runtime
-- [ ] Preview
-- [ ] 部署系统
+macOS / Linux：
 
-### Post-MVP 功能
-- Vector embeddings for context
-- Long-term memory
-- More agents (DevOps, QA, Security)
-- Plugin system
-- Marketplace
+```bash
+cp apps/api/.env.example apps/api/.env
+```
 
-## 贡献指南
+默认配置使用：
 
-我们欢迎贡献！请：
+```env
+DATABASE_URL="file:./dev.db"
+API_PORT=3003
+LOCAL_AI_BASE="http://localhost:11434"
+LOCAL_AI_MODEL="qwen2.5:latest"
+```
 
-1. Fork 仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 打开 Pull Request
+也可以在应用的“设置 → 模型配置”中添加 OpenAI-compatible 接口。
 
-## 许可证
+### 初始化数据库
+
+```bash
+pnpm --filter @agenthub/api db:generate
+pnpm --filter @agenthub/api db:migrate
+```
+
+### 开发启动
+
+分别启动 API、Web 和 Electron：
+
+```bash
+pnpm --filter @agenthub/api dev
+pnpm --filter @agenthub/web dev
+pnpm --filter @agenthub/desktop dev
+```
+
+服务地址：
+
+- Web：<http://localhost:3000>
+- API：<http://localhost:3003>
+
+也可以启动整个 Monorepo：
+
+```bash
+pnpm dev
+```
+
+## Docker 一键启动
+
+AgentHub 平台的 Web、API 和 SQLite 数据运行在 Docker 中，Electron 保留在宿主机，用于授权本地 Workspace、显示桌面窗口并管理 Coding Worker Sandbox。API 容器不会挂载宿主机 Docker Socket。
+
+Windows 推荐直接双击 `start-agenthub.cmd`，或运行：
+
+```powershell
+.\start-agenthub.ps1 -Build
+```
+
+脚本会检查 Docker Desktop、创建 `.env.docker`、构建并启动 Web/API、初始化 SQLite、等待健康检查通过，最后启动宿主机 Electron。后续镜像没有变化时可以省略 `-Build`：
+
+```powershell
+.\start-agenthub.ps1
+```
+
+只启动容器平台、不打开 Electron：
+
+```powershell
+.\start-agenthub.ps1 -NoDesktop
+```
+
+停止平台：
+
+```powershell
+.\stop-agenthub.ps1
+```
+
+也可以直接使用 Docker Compose：
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f
+docker compose down
+```
+
+持久化数据保存在 `agenthub-database` 和 `agenthub-api-data` Docker volumes 中，普通的 `docker compose down` 不会删除数据。只有明确执行 `docker compose down -v` 才会删除数据库和运行数据。
+
+模型配置写入本地 `.env.docker`。如果容器需要访问宿主机 Ollama，请使用：
+
+```env
+LOCAL_AI_BASE=http://host.docker.internal:11434
+LOCAL_AI_MODEL=qwen2.5:latest
+```
+
+浏览器仍通过 `http://localhost:3000` 访问 Web，通过 `http://localhost:3003` 访问 API 和 Socket.IO。
+
+## 常用检查
+
+```bash
+pnpm type-check
+pnpm build
+pnpm lint
+```
+
+## 当前限制
+
+- Electron 主对话已使用统一 Coding Worker；旧循环代码仍保留用于迁移期间对照，但不在主入口执行。
+- 项目默认仍使用本地开发模式；切换为“完全隔离”后，每次任务会创建独立工作副本和 Docker Sandbox，文件操作只影响副本，命令在容器内执行，验证成功并通过并发冲突检查后才同步回原 Workspace。
+- Sandbox 已具备独立 Docker 网络命名空间、内存/CPU/PID 限制、capability 移除、`no-new-privileges`、失败回收和安全同步；尚未实现只读根文件系统、细粒度域名白名单和长期运行任务的断点恢复。
+- TaskGraph 相关数据结构和任务执行服务存在，但尚未成为 Project Assistant 的主执行路径。
+- 前端已经接收工具、诊断、上下文压缩和 Diff 状态；Complexity Score 的独立可视化面板尚未实现。
+
+## 安全原则
+
+- Workspace 路径必须是相对路径并限制在授权目录内
+- 大范围写入和具有副作用的工具需要确认
+- 没有真实工具结果不能报告操作完成
+- 修改任务验证成功后才发布最终 Diff
+- Sandbox 失败或中断时销毁工作副本，不向原 Workspace 同步部分修改
+- Subagent 默认只读，避免多个 Agent 同时争抢文件写入权
+
+Sandbox 默认使用 `node:22-bookworm` 和 Docker bridge 网络。可通过 `AGENTHUB_SANDBOX_IMAGE` 使用项目专用镜像，通过 `AGENTHUB_SANDBOX_NETWORK=none` 完全禁用容器外网访问。
+
+## License
 
 MIT
-
-## 联系方式
-
-- Issues: [GitHub Issues](https://github.com/yourusername/agenthub/issues)
-- Email: hello@agenthub.dev
-
----
-
-**AgentHub** - The AI Native Collaboration OS for Software Development

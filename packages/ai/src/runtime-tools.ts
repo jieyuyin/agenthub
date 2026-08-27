@@ -1,4 +1,6 @@
-import { tool } from 'langchain'
+import { tool, type DynamicStructuredTool, type DynamicTool } from 'langchain'
+
+type RuntimeTool = DynamicStructuredTool<any, any, any, any, any, string> | DynamicTool<any, any>
 
 export interface RuntimeToolHandlers {
   readFile: (params: { filepath: string }) => Promise<string>
@@ -13,7 +15,7 @@ export interface RuntimeToolHandlers {
 }
 
 /** Agent may only use these three tools (minimal closed loop). */
-export function createRuntimeTools(handlers: RuntimeToolHandlers): ReturnType<typeof tool>[] {
+export function createRuntimeTools(handlers: RuntimeToolHandlers): RuntimeTool[] {
   return [
     tool(
       async (input: { filepath: string }) => handlers.readFile(input),

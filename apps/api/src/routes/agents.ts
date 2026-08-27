@@ -66,6 +66,20 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       status: 'idle',
       lastActivityAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
       createdAt: new Date(),
+    },
+    {
+      id: 'debugger-1',
+      name: 'Debug Agent',
+      role: 'debugger',
+      version: '1.0.0',
+      systemPrompt: 'Evidence-driven debugging agent that inspects, reproduces, patches and verifies before completion.',
+      tools: ['list_files', 'read_file', 'git_status', 'git_branches', 'git_diff', 'git_clone', 'git_pull', 'git_checkout', 'git_commit', 'write_file', 'apply_patch', 'run_command', 'start_service', 'service_status', 'stop_service'],
+      model: 'configured-model',
+      temperature: 0.2,
+      maxTokens: 3500,
+      status: 'idle',
+      lastActivityAt: new Date(),
+      createdAt: new Date(),
     }
   ];
 
@@ -75,6 +89,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       id: 'exec-1',
       agentId: 'developer-1',
       taskId: 'task-1',
+      title: '创建 UserProfile 组件',
       status: 'running',
       input: { action: 'create_component', component: 'UserProfile' },
       logs: [
@@ -90,6 +105,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       id: 'exec-2',
       agentId: 'planner-1',
       taskId: 'task-2',
+      title: '复核项目进度',
       status: 'completed',
       input: { action: 'review_progress', project: 'AgentHub' },
       output: { status: 'on_track', issues: 0, completion: 85 },
@@ -106,6 +122,7 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
       id: 'exec-3',
       agentId: 'developer-1',
       taskId: 'task-3',
+      title: '创建用户 API',
       status: 'failed',
       input: { action: 'create_api', endpoint: '/users' },
       error: 'Database connection timeout',

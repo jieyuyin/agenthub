@@ -139,7 +139,7 @@ export default function AgentsPage() {
                     <div>
                       <span className="text-slate-500">Started:</span>
                       <br />
-                      {new Date(execution.startedAt).toLocaleString()}
+                      {execution.startedAt ? new Date(execution.startedAt).toLocaleString() : '尚未开始'}
                     </div>
                     {execution.completedAt && (
                       <div>

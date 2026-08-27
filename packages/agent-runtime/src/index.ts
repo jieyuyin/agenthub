@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import Docker from 'dockerode'
 import type { Runtime, RuntimeStatus, RuntimeExecResult, RuntimeManager } from '@agenthub/shared'
+export * from './coding-worker.js'
 
 const DEFAULT_IMAGE = 'node:20-alpine'
 const DEFAULT_MEMORY = 512 * 1024 * 1024 // 512 MB

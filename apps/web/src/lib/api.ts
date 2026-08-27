@@ -1,4 +1,4 @@
-const configuredApiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+const configuredApiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3003/api'
 export const API_BASE = `${configuredApiBase.replace(/\/$/, '')}${/\/api\/?$/.test(configuredApiBase) ? '' : '/api'}`
 
 export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {

@@ -11,6 +11,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@agenthub/shared": "workspace:*",
     "dockerode": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0"
   }
 }

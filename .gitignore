@@ -5,6 +5,7 @@ build
 .next
 .env
 .env.local
+.env.docker
 .env.*.local
 *.log
 .DS_Store
@@ -12,7 +13,6 @@ build
 .vscode
 *.swp
 *.swo
-pnpm-lock.yaml
 package-lock.json
 yarn.lock
 coverage

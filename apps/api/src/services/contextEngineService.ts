@@ -7,7 +7,7 @@ type MemoryItem = { id: string; scope: 'user' | 'project' | 'conversation'; scop
 type TaskState = { projectId: string; goal: string; phase: string; status: string; nextStep?: string; updatedAt: string }
 type KnowledgeChunk = { id: string; projectId: string; path: string; content: string; hash: string }
 type ToolContext = { id: string; projectId: string; conversationId?: string; tool: string; summary: string; createdAt: string }
-type ConversationContext = { id: string; projectId: string | null; messages: ContextMessage[]; updatedAt: string }
+type ConversationContext = { id: string; projectId: string | null; messages: ContextMessage[]; summary?: string; compactedMessageIds?: string[]; compactedAt?: string; updatedAt: string }
 type ContextStore = {
   conversations: Record<string, ConversationContext>
   memories: MemoryItem[]
@@ -136,6 +136,31 @@ export function recordConversationMessage(input: { conversationId: string; proje
   writeStore(store)
 }
 
+export function getConversationForCompaction(conversationId: string) {
+  const conversation = readStore().conversations[conversationId]
+  if (!conversation) return null
+  const compactedIds = new Set(conversation.compactedMessageIds ?? [])
+  return {
+    summary: conversation.summary ?? '',
+    messages: conversation.messages.filter((message) => !compactedIds.has(message.id)),
+    totalMessages: conversation.messages.length,
+    compactedMessages: compactedIds.size
+  }
+}
+
+export function saveConversationCompaction(input: { conversationId: string; summary: string; messageIds: string[] }) {
+  const store = readStore()
+  const conversation = store.conversations[input.conversationId]
+  if (!conversation) return null
+  conversation.summary = input.summary.trim().slice(0, 24_000)
+  conversation.compactedMessageIds = Array.from(new Set([...(conversation.compactedMessageIds ?? []), ...input.messageIds])).slice(-240)
+  conversation.compactedAt = new Date().toISOString()
+  conversation.updatedAt = conversation.compactedAt
+  store.conversations[input.conversationId] = conversation
+  writeStore(store)
+  return { summary: conversation.summary, compactedCount: input.messageIds.length, compactedAt: conversation.compactedAt }
+}
+
 export function addMemory(input: { scope: MemoryItem['scope']; scopeId: string; content: string }) {
   const store = readStore()
   const duplicate = store.memories.find((item) => item.scope === input.scope && item.scopeId === input.scopeId && item.content === input.content)
@@ -193,7 +218,8 @@ export function buildModelContext(input: { conversationId: string; projectId?: s
   const conversation = store.conversations[input.conversationId]
   const projectId = input.projectId ?? conversation?.projectId ?? null
   const queryWords = words(input.query)
-  const history = (conversation?.messages ?? []).slice(-16)
+  const compactedIds = new Set(conversation?.compactedMessageIds ?? [])
+  const history = (conversation?.messages ?? []).filter((message) => !compactedIds.has(message.id)).slice(-12)
   const memories = store.memories
     .filter((item) => (item.scope === 'user' && item.scopeId === (input.userId ?? 'local-user')) || (item.scope === 'conversation' && item.scopeId === input.conversationId) || (projectId && item.scope === 'project' && item.scopeId === projectId))
     .sort((a, b) => relevance(queryWords, b.content) - relevance(queryWords, a.content))
@@ -208,6 +234,7 @@ export function buildModelContext(input: { conversationId: string; projectId?: s
   const longTermMemory = getLongTermMemory(projectId)
 
   const sections: string[] = []
+  if (conversation?.summary) sections.push(`<conversation_summary>\n${conversation.summary}\n</conversation_summary>`)
   if (longTermMemory.profile.facts.length || longTermMemory.profile.preferences.length) sections.push(`<user_profile>\n${[...longTermMemory.profile.facts, ...longTermMemory.profile.preferences.map((item) => `偏好：${item}`)].map((item) => `- ${item}`).join('\n')}\n</user_profile>`)
   if (longTermMemory.globalMemory) sections.push(`<global_memory_md>\n${longTermMemory.globalMemory}\n</global_memory_md>`)
   if (longTermMemory.projectMemory) sections.push(`<project_memory_md>\n${longTermMemory.projectMemory}\n</project_memory_md>`)

@@ -1,0 +1,64 @@
+name: agenthub
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    image: agenthub-api:local
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3003
+      DATABASE_URL: file:/data/agenthub.db
+      CORS_ORIGIN: http://localhost:3000
+      LOCAL_AI_BASE: ${LOCAL_AI_BASE:-}
+      LOCAL_AI_MODEL: ${LOCAL_AI_MODEL:-}
+      LOCAL_AI_API_KEY: ${LOCAL_AI_API_KEY:-}
+      AI_API_URL: ${AI_API_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      AI_REQUEST_TIMEOUT_MS: ${AI_REQUEST_TIMEOUT_MS:-120000}
+      CONTEXT_COMPACT_THRESHOLD_TOKENS: ${CONTEXT_COMPACT_THRESHOLD_TOKENS:-18000}
+      CONTEXT_RECENT_MESSAGES: ${CONTEXT_RECENT_MESSAGES:-10}
+    ports:
+      - "${AGENTHUB_API_PORT:-3003}:3003"
+    volumes:
+      - agenthub-database:/data
+      - agenthub-api-data:/app/apps/api/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3003/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3003/api}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:3003}
+    image: agenthub-web:local
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${AGENTHUB_WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+volumes:
+  agenthub-database:
+  agenthub-api-data:

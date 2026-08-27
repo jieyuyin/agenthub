@@ -5,11 +5,21 @@ import * as observabilityService from './observabilityService'
 import { createAgentToolHandlers, type AgentToolHandlers } from './agentToolHandlers'
 import { createChatCompletion } from './aiService'
 import { addToolContext, updateTaskState } from './contextEngineService'
+import { DiagnosticWorkflow } from './diagnosticWorkflow'
+import { ComplexityEvaluator, ContextManager, SubagentScheduler } from '@agenthub/agent-runtime/dist/coding-worker'
 
 const MAX_TOOL_ROUNDS = 24
 const MAX_TERMINAL_FAILURE_RETRIES = 3
 
 const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'search_code',
+      description: 'Search relevant project files without loading the whole repository.',
+      parameters: { type: 'object', properties: { query: { type: 'string' }, path: { type: 'string' }, maxResults: { type: 'number' } }, required: ['query'] }
+    }
+  },
   {
     type: 'function',
     function: {
@@ -41,6 +51,14 @@ const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'write_file',
+      description: 'Create or replace a file in the workspace.',
+      parameters: { type: 'object', properties: { filepath: { type: 'string' }, content: { type: 'string' } }, required: ['filepath', 'content'] }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_terminal',
       description: 'Execute a shell command in the isolated runtime container.',
       parameters: {
@@ -52,12 +70,21 @@ const AGENT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
         required: ['command']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'git_diff',
+      description: 'Return the current workspace Git diff.',
+      parameters: { type: 'object', properties: {} }
+    }
   }
 ]
 
 const SYSTEM_PROMPT = `You are an autonomous coding agent in an isolated Docker runtime.
-You may ONLY use these tools: read_file, run_terminal, create_patch.
+You may ONLY use these tools: search_code, read_file, write_file, create_patch, run_terminal, git_diff.
 Plan briefly, read files as needed, patch code, run commands to verify.
+Dynamically discover only relevant code instead of loading the whole repository.
 When run_terminal returns success:false, analyze stderr, fix with create_patch, and retry the command.`
 
 async function dispatchTool(
@@ -71,6 +98,9 @@ async function dispatchTool(
   try {
     let result: unknown
     switch (name) {
+      case 'search_code':
+        result = await handlers.searchCode({ query: String(args.query), path: args.path ? String(args.path) : undefined, maxResults: args.maxResults ? Number(args.maxResults) : undefined })
+        break
       case 'read_file':
         result = await handlers.readFile({ filepath: String(args.filepath) })
         break
@@ -81,11 +111,17 @@ async function dispatchTool(
           newContent: String(args.newContent)
         })
         break
+      case 'write_file':
+        result = await handlers.writeFile({ filepath: String(args.filepath), content: String(args.content) })
+        break
       case 'run_terminal':
         result = await handlers.runTerminal({
           command: String(args.command),
           timeout: args.timeout != null ? Number(args.timeout) : undefined
         })
+        break
+      case 'git_diff':
+        result = await handlers.gitDiff()
         break
       default:
         throw new Error(`Tool not allowed: ${name}`)
@@ -124,7 +160,7 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
   const task = await taskService.getTaskById(execution.taskId)
   if (!task) {
     console.error(`[taskExecutor] task ${execution.taskId} not found`)
-    return
+    return false
   }
 
   const workspace = task.conversation?.workspace
@@ -157,6 +193,24 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
     stepIndex: 0
   }
   const handlers = createAgentToolHandlers(toolCtx)
+  const workerContext = new ContextManager({
+    goal: task.title,
+    constraints: ['Work only inside the workspace', 'Do not claim completion without verification'],
+    acceptanceCriteria: ['Requested change is implemented', 'Relevant verification succeeds'],
+    background: task.description
+  })
+  const complexityEvaluator = new ComplexityEvaluator()
+  const subagentScheduler = new SubagentScheduler(async ({ kind, reason, context }) => {
+    const specialist = await createChatCompletion({
+      model: process.env.LOCAL_AI_MODEL || process.env.AI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: `You are a read-only ${kind} subagent. Analyze the supplied coding-worker state. Return concise findings and a recommended next action. Do not claim that you changed files.` },
+        { role: 'user', content: `Reason: ${reason}\n\nState:\n${JSON.stringify(context).slice(0, 24_000)}` }
+      ]
+    })
+    return specialist.choices?.[0]?.message?.content ?? 'Subagent returned no findings.'
+  })
+  const usedSubagents = new Set<string>()
 
   const messages: any[] = [
     { role: 'system', content: SYSTEM_PROMPT },
@@ -170,6 +224,7 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
 
   let terminalFailureRetries = 0
   let completed = false
+  const diagnostic = new DiagnosticWorkflow(`${agentId} ${task.title}\n${task.description}`)
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -183,7 +238,8 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
         choices?: Array<{ message?: { content?: string; tool_calls?: any[] } }>
       } = await createChatCompletion({
         model: process.env.LOCAL_AI_MODEL || process.env.AI_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        messages
+        messages,
+        tools: AGENT_TOOLS
       })
 
       const choice = completion.choices?.[0]?.message
@@ -191,12 +247,27 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
 
       if (!choice.tool_calls?.length) {
         await observabilityService.recordAgentTrace({
-          taskId,
+          taskId: task.id,
           stepIndex: round,
           prompt: promptSnapshot,
           reasoning: choice.content ?? null,
           result: choice.content ?? null
         })
+        const required = diagnostic.nextRequiredInstruction()
+        if (required) {
+          messages.push({ role: 'assistant', content: choice.content ?? '继续完成诊断。' })
+          messages.push({ role: 'system', content: required })
+          continue
+        }
+        const completionAssessment = complexityEvaluator.assess(workerContext, 0.2)
+        const reviewKind = subagentScheduler.select(completionAssessment, workerContext, true)
+        if (reviewKind && !usedSubagents.has(reviewKind)) {
+          usedSubagents.add(reviewKind)
+          const review = await subagentScheduler.run(reviewKind, completionAssessment, workerContext)
+          messages.push({ role: 'assistant', content: choice.content ?? 'Implementation complete; requesting specialist review.' })
+          messages.push({ role: 'system', content: `${reviewKind} subagent findings:\n${String(review)}\nAddress material findings, then verify again.` })
+          continue
+        }
         completed = true
         break
       }
@@ -222,6 +293,15 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
         }
 
         const result = await dispatchTool(task.id, round, fn.name, parsed, handlers)
+        workerContext.record({
+          tool: fn.name,
+          input: parsed,
+          output: result,
+          success: !(fn.name === 'run_terminal' && result && typeof result === 'object' && 'success' in result && !(result as any).success),
+          durationMs: 0,
+          createdAt: new Date().toISOString()
+        })
+        diagnostic.afterTool(fn.name, result)
         addToolContext({
           projectId: workspace.id,
           conversationId: task.conversationId,
@@ -253,6 +333,15 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
         result: toolResults
       })
 
+      const uncertainty = terminalFailed ? Math.min(1, 0.45 + terminalFailureRetries * 0.2) : 0.2
+      const assessment = complexityEvaluator.assess(workerContext, uncertainty)
+      const subagentKind = subagentScheduler.select(assessment, workerContext, false)
+      if (subagentKind && !usedSubagents.has(subagentKind)) {
+        usedSubagents.add(subagentKind)
+        const findings = await subagentScheduler.run(subagentKind, assessment, workerContext)
+        messages.push({ role: 'system', content: `${subagentKind} subagent findings:\n${String(findings)}\nUse these findings as advice; you remain responsible for the next action.` })
+      }
+
       if (terminalFailed && lastTerminalResult) {
         terminalFailureRetries += 1
         if (terminalFailureRetries >= MAX_TERMINAL_FAILURE_RETRIES) {
@@ -263,7 +352,7 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
             completedAt: new Date()
           })
           console.error(`[taskExecutor] task ${task.id} failed after ${terminalFailureRetries} terminal failures`)
-          return
+          return false
         }
         messages.push({
           role: 'user',
@@ -287,7 +376,7 @@ export async function runAgentExecution(executionId: string): Promise<boolean> {
         completedAt: new Date()
       })
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[taskExecutor] task ${task.id} failed`, error)
     await agentExecutionService.updateAgentExecutionStatus({
       id: executionId,

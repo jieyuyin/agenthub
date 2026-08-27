@@ -16,7 +16,7 @@ export type TaskStatus =
   | 'blocked'
   | 'rejected'
 export type PatchStatus = 'generated' | 'review_requested' | 'approved' | 'applied' | 'rejected'
-export type AgentRole = 'pm' | 'frontend' | 'backend' | 'qa'
+export type AgentRole = 'pm' | 'frontend' | 'backend' | 'qa' | 'orchestrator' | 'planner' | 'developer' | 'tester' | 'debugger'
 export type AgentStatus = 'idle' | 'busy' | 'error' | 'paused'
 export type RuntimeStatus = 'starting' | 'ready' | 'error' | 'stopped'
 export type DeploymentStatus = 'pending' | 'building' | 'success' | 'failed'
@@ -170,7 +170,7 @@ export interface Agent {
   version: string
   systemPrompt: string
   tools: string[] // tool names
-  model: 'gpt-4' | 'gpt-3.5-turbo'
+  model: string
   temperature: number
   maxTokens: number
   status: AgentStatus

@@ -35,7 +35,7 @@ export function registerDesktopBridge(io: Server, socket: Socket) {
   })
 }
 
-export function requestDesktopTool(io: Server, input: { workspaceToken: string; name: string; arguments: Record<string, unknown> }) {
+export function requestDesktopTool(io: Server, input: { conversationId: string; workspaceToken: string; name: string; arguments: Record<string, unknown> }) {
   if (!desktopSocketId) throw new Error('未连接 AgentHub Desktop。请从桌面 App 打开项目后重试。')
   const requestId = randomUUID()
   return new Promise<unknown>((resolve, reject) => {
