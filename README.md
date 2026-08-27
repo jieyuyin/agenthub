@@ -21,12 +21,6 @@ AgentHub 是一个面向软件研发场景的本地 Coding Agent 平台。它以
 - 三种项目运行模式：本地开发、Docker 运行和完全隔离 Sandbox
 - Sandbox 工作副本、容器执行、冲突检测、安全同步与自动回收
 
-尚未完成或尚未完整接入：
-
-- Sandbox 只读根文件系统、细粒度网络白名单与断点恢复
-- 完整 TaskGraph 多 Agent 编排 UI
-- 云端部署集成
-- 生产级用户认证和远程数据同步
 
 ## Agent 架构
 
@@ -101,8 +95,6 @@ Reasoning
 → 更新 Context
 → 判断是否完成
 ```
-
-系统不会把“现在创建文件”“让我测试一下”等计划文字视为完成。修改任务没有真实写入不能结束，验证失败时会继续读取证据、修复并重试。
 
 ### Context Manager
 
@@ -215,28 +207,7 @@ pnpm install
 
 ### 配置 API
 
-Windows：
-
-```powershell
-Copy-Item apps/api/.env.example apps/api/.env
-```
-
-macOS / Linux：
-
-```bash
-cp apps/api/.env.example apps/api/.env
-```
-
-默认配置使用：
-
-```env
-DATABASE_URL="file:./dev.db"
-API_PORT=3003
-LOCAL_AI_BASE="http://localhost:11434"
-LOCAL_AI_MODEL="qwen2.5:latest"
-```
-
-也可以在应用的“设置 → 模型配置”中添加 OpenAI-compatible 接口。
+可以在应用的“设置 → 模型配置”中添加 OpenAI-compatible 接口。
 
 ### 初始化数据库
 
